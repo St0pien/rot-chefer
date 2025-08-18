@@ -22,7 +22,7 @@ Or you can build a Docker image via:
 docker build --tag <tag_name> .
 ```
 
-Finally, set the simlink of the data path:
+Finally, set the simlink for the data path including {train,val} as subdirectories:
 ```
 cd CoIBA
 ln -s /path/to/imagenet ./data
