@@ -45,11 +45,11 @@ To conduct the insertion and deletion tests with 1000 iterations, please run the
 bash run_eval.sh "--cut-off 1000"
 ```
 
-## Hyper-parameters
+## Hyperparameters
 - **--start_target** indicates start layer for attribution (default: 4)
 - **--end_target** indicates end layer for attribution (default: 12)
 - **--op_name** indicates operation names for attribution (default: norm1)
-- **--optim_steps** indicates number of optimization steps for IBA ()
+- **--optim_steps** indicates the number of optimization steps for IBA ()
 - **--iba_lr** indicates learning rate for IBA
 - **--beta** indicates beta value for IBA
 - **--load_estim** indicates whether to load precomputed estimators
