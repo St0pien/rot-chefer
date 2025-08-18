@@ -25,7 +25,7 @@ docker build --tag <tag_name> .
 Finally, set the simlink of the data path:
 ```
 cd CoIBA
-ln -s /path/to/imagenet .
+ln -s /path/to/imagenet ./data
 ```
 
 ## Visualization
