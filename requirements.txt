@@ -1,0 +1,10 @@
+torch==2.4.1 -f https://download.pytorch.org/whl/cu121
+torchaudio==2.4.1 -f https://download.pytorch.org/whl/cu121
+torchvision==0.19.1 -f https://download.pytorch.org/whl/cu121
+wandb
+timm==1.0.19
+coloredlogs
+opencv-python
+matplotlib
+einops
+kornia
