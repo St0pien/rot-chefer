@@ -28,4 +28,4 @@ python generate.py \
   --network $net \
   --beta $beta \
   --save-path $save \
-  --load_estim \
+  --load_estim 

@@ -118,7 +118,6 @@ def main():
     args = parsing()
     
     val_dir = os.path.join(args.data_path, 'val')
-    batch_size = args.batch_size
     num_workers = args.workers
 
     model, input_size = get_model(args.network, args)
@@ -138,7 +137,7 @@ def main():
                                     model_transform)
     val_loader = DataLoader(
         Datasets,
-        batch_size=batch_size,
+        batch_size=1,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
@@ -173,8 +172,8 @@ def main():
         
         saliency_maps = saliency_maps.data.cpu().numpy()
 
-        del_score = deletion.evaluate(img=images.detach().cpu(), pred=target, mask=saliency_maps, idx=i, b=batch_size)
-        ins_score = insertion.evaluate(img=images.detach().cpu(), pred=target, mask=saliency_maps, idx=i, b=batch_size)
+        del_score = deletion.evaluate(img=images.detach().cpu(), pred=target, mask=saliency_maps, idx=i, b=1)
+        ins_score = insertion.evaluate(img=images.detach().cpu(), pred=target, mask=saliency_maps, idx=i, b=1)
 
         for delscore in del_score:
             scores['del'].append(delscore)
