@@ -116,8 +116,12 @@ def computeAndSaveMaps(args):
     logger.info("[Setting] Save path: {}".format(args.save_path))
 
     classes = os.listdir("data/imagenet/val")
+
+    maps = []
     
     for idx in pbar:
+        if idx > 1:
+            break
 
         if idx >= args.cut_off:
             logger.info("Done at {}".format(args.cut_off))
@@ -182,6 +186,7 @@ def computeAndSaveMaps(args):
             rawImage = np.array(image_transform(rawImage)) / 255
             name, ext = file.split(".")
             saliencyMap = saliencyMap.detach().cpu().squeeze(0).squeeze(0)
+            maps.append(saliencyMap)
             saveMapWithColorMap(
                 os.path.join(
                     args.save_path,
@@ -201,6 +206,8 @@ def computeAndSaveMaps(args):
                     c, len(os.listdir("data/imagenet/val/" + classes[idx]))
                 )
             )
+
+    np.save("maps.npy", np.array(maps))
 
 
 def get_label_list(args):
