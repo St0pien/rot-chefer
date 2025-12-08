@@ -115,7 +115,7 @@ def computeAndSaveMaps(args):
     logger.info("Model Transform: {}".format(model_transform))
     logger.info("[Setting] Save path: {}".format(args.save_path))
 
-    classes = os.listdir("data/imagenet/val")
+    classes = sorted(os.listdir("data/imagenet/val"))
 
     maps = []
     
@@ -126,7 +126,7 @@ def computeAndSaveMaps(args):
 
         savedir = "{}".format(classes[idx])
 
-        for c, file in enumerate(os.listdir("data/imagenet/val/"+ classes[idx])):
+        for c, file in enumerate(sorted(os.listdir("data/imagenet/val/"+ classes[idx]))):
             result = "T"
             os.makedirs(os.path.join(args.save_path, savedir), exist_ok=True)
 
