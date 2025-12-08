@@ -120,9 +120,6 @@ def computeAndSaveMaps(args):
     maps = []
     
     for idx in pbar:
-        if idx > 1:
-            break
-
         if idx >= args.cut_off:
             logger.info("Done at {}".format(args.cut_off))
             break

@@ -84,7 +84,7 @@ def save_estimator(args, target_layers, iba, model):
 def load_estimator(args, target_layers, iba):
     for i, target_layer in enumerate(target_layers):
 
-        iba.layer_estimator[target_layer] = torch.load(f'{args.iba_path}/{args.network}/layer_{target_layer}.torch', map_location=f'cuda:{args.rank}').cuda(f'cuda:{args.rank}')
+        iba.layer_estimator[target_layer] = torch.load(f'{args.iba_path}/{args.network}/layer_{target_layer}.torch', map_location=f'cuda:{args.rank}', weights_only=False).cuda(f'cuda:{args.rank}')
         iba.layer_estimator[target_layer].device = f'cuda:{args.rank}'
     iba._build()
     
