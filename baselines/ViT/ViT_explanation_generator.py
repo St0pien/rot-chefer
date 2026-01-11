@@ -2,6 +2,9 @@ import argparse
 import torch
 import numpy as np
 from numpy import *
+from torchvision.transforms.functional import affine
+from torch.utils.data.dataset import TensorDataset
+from torch.utils.data.dataloader import DataLoader
 
 # compute rollout between attention layers
 def compute_rollout_attention(all_layer_matrices, start_layer=0):
@@ -39,7 +42,123 @@ class LRP:
 
         return self.model.relprop(torch.tensor(one_hot_vector).to(input.device), method=method, is_ablation=is_ablation,
                                   start_layer=start_layer, **kwargs)
+                                
 
+    def generate_LRP_parallel(
+        self,
+        input,
+        index=None,
+        method="transformer_attribution",
+        is_ablation=False,
+        start_layer=0,
+    ):
+        output = self.model(input)  # [B, C]
+
+        if index is None:
+            index = output.argmax(dim=-1)
+
+        selected = output.gather(1, index.unsqueeze(1))  # [B, 1]
+
+        self.model.zero_grad()
+
+        torch.autograd.backward(
+            selected,
+            grad_tensors=torch.ones_like(selected)
+        )
+
+        R = torch.zeros_like(output)
+        R.scatter_(1, index.unsqueeze(1), 1.0)
+
+        return self.model.relprop(
+            R,
+            method=method,
+            is_ablation=is_ablation,
+            start_layer=start_layer,
+            alpha=1,
+        )
+
+
+
+
+class FulLRP:
+    def __init__(self, model, n_samples=50, batch_size=16, angle_range:tuple=(-90.0, 90.0), translation_offset=5):
+        self.model = model
+        self.model.eval()
+        self.start_angle = angle_range[0]
+        self.end_angle = angle_range[1]
+        self.transation_offset = translation_offset
+        self.n_samples = n_samples
+        self.batch_size = batch_size
+
+    def perturbe_input(self, input: torch.Tensor):
+        images = [input]
+        rev_angles = [0]
+        rev_translations = [(0,0)]
+        angles = np.linspace(self.start_angle, self.end_angle, self.n_samples - 1)
+        for i in range(self.n_samples - 1):
+            x, y = np.random.randint(-self.transation_offset, self.transation_offset, size=2)
+            angle = angles[i]
+            images.append(affine(input.clone(), angle=angle, translate=(x,y), scale=1, shear=0))
+            rev_angles.append(-angle)
+            rev_translations.append((-x, -y))
+        
+        return images, rev_angles, rev_translations
+            
+
+    def generate_LRP(
+            self,
+            input,
+            index=None,
+            is_ablation=False,
+            start_layer=0,
+        ):
+            perturbed_data, angles, translations = self.perturbe_input(input)
+            perturbed_dataset = TensorDataset(torch.cat(perturbed_data))
+
+            perturbed_dataloader = DataLoader(perturbed_dataset, batch_size=self.batch_size)
+
+            full_cam = torch.zeros(1, input.shape[2], input.shape[3]).to(input.device)
+
+            if index is None:
+                output = self.model(input)
+                index = np.argmax(output.detach().cpu())
+
+            i = 0
+            for batch in perturbed_dataloader:
+                batch = torch.cat(batch)
+                batch.detach_()
+                output = self.model(batch)  # [B, C]
+
+                b_index = torch.full((batch.shape[0], 1), index).to(input.device)
+                selected = output.gather(1, b_index)
+
+                self.model.zero_grad()
+
+                torch.autograd.backward(
+                    selected,
+                    grad_tensors=torch.ones_like(selected)
+                )
+
+                R = torch.zeros_like(output)
+                R.scatter_(1, b_index, 1.0)
+
+                batch_cam = self.model.relprop(
+                    R,
+                    method="full_transformer_attribution",
+                    is_ablation=is_ablation,
+                    start_layer=start_layer,
+                    alpha=1,
+                )
+                batch_cam.detach_()
+                with torch.no_grad():
+                    inv_cams = []
+                    for cam in batch_cam:
+                        inv = affine(cam.unsqueeze(0), angle=angles[i], translate=translations[i], scale=1, shear=0)
+                        inv_cams.append(inv)
+                        i += 1
+                    full_cam += torch.cat(inv_cams).sum(dim=0).unsqueeze(0)
+
+            return full_cam.detach()
 
 
 class Baselines:

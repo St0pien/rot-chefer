@@ -36,17 +36,33 @@ default_cfgs = {
 }
 
 def compute_rollout_attention(all_layer_matrices, start_layer=0):
-    # adding residual consideration
-    num_tokens = all_layer_matrices[0].shape[1]
-    batch_size = all_layer_matrices[0].shape[0]
-    eye = torch.eye(num_tokens).expand(batch_size, num_tokens, num_tokens).to(all_layer_matrices[0].device)
-    all_layer_matrices = [all_layer_matrices[i] + eye for i in range(len(all_layer_matrices))]
-    # all_layer_matrices = [all_layer_matrices[i] / all_layer_matrices[i].sum(dim=-1, keepdim=True)
-    #                       for i in range(len(all_layer_matrices))]
-    joint_attention = all_layer_matrices[start_layer]
-    for i in range(start_layer+1, len(all_layer_matrices)):
-        joint_attention = all_layer_matrices[i].bmm(joint_attention)
+    """
+    all_layer_matrices: list of [B, T, T] attention matrices from each layer
+    start_layer: int, layer to start the rollout from
+    returns: [B, T, T] joint attention rollout
+    """
+    batch_size, num_tokens, _ = all_layer_matrices[0].shape
+
+    # Add identity (residual connection) and normalize
+    rollout_mats = []
+    for mat in all_layer_matrices:
+        # Add identity
+        eye = torch.eye(num_tokens, device=mat.device).unsqueeze(0).repeat(batch_size, 1, 1)
+        mat = mat + eye
+
+        # Normalize rows
+        mat = mat / mat.sum(dim=-1, keepdim=True)
+        rollout_mats.append(mat)
+
+    # Initialize joint attention
+    joint_attention = rollout_mats[start_layer]
+
+    # Multiply layer by layer
+    for mat in rollout_mats[start_layer + 1:]:
+        joint_attention = mat.bmm(joint_attention)  # [B, T, T]
+
     return joint_attention
+
 
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, drop=0.):
@@ -354,19 +370,32 @@ class VisionTransformer(nn.Module):
             return cam
         
         # our method, method name grad is legacy
-        elif method == "transformer_attribution" or method == "grad":
+        elif method == "transformer_attribution" or method == "grad" or method == "full_transformer_attribution":
             cams = []
             for blk in self.blocks:
                 grad = blk.attn.get_attn_gradients()
                 cam = blk.attn.get_attn_cam()
-                cam = cam[0].reshape(-1, cam.shape[-1], cam.shape[-1])
-                grad = grad[0].reshape(-1, grad.shape[-1], grad.shape[-1])
+                cam = cam.reshape(cam.shape[0], -1, cam.shape[-1], cam.shape[-1])
+                grad = grad.reshape(grad.shape[0],-1, grad.shape[-1], grad.shape[-1])
                 cam = grad * cam
-                cam = cam.clamp(min=0).mean(dim=0)
-                cams.append(cam.unsqueeze(0))
+                cam = cam.clamp(min=0).mean(dim=1)
+                cams.append(cam)
             rollout = compute_rollout_attention(cams, start_layer=start_layer)
             cam = rollout[:, 0, 1:]
-            return cam
+            if method != "full_transformer_attribution":
+                return cam
+            
+            cam = torch.cat([torch.ones(cam.shape[0], 1).to(cam.device), cam], dim=1)
+            cam.unsqueeze_(-1)
+
+            pixel_rel, pos_rel = self.add.relprop(cam, **kwargs)
+            rel_map = pixel_rel + pos_rel
+
+            rel_map = rel_map[:, 1:]
+            rel_map = self.patch_embed.relprop(rel_map, **kwargs)
+            rel_map = rel_map.sum(dim=1)
+
+            return rel_map
             
         elif method == "last_layer":
             cam = self.blocks[-1].attn.get_attn_cam()

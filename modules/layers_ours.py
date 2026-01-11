@@ -97,27 +97,29 @@ class AvgPool2d(nn.AvgPool2d, RelPropSimple):
 class Add(RelPropSimple):
     def forward(self, inputs):
         return torch.add(*inputs)
-
-    def relprop(self, R, alpha):
+    
+    def relprop(self, R, **kwargs):
+        X1, X2 = self.X
         Z = self.forward(self.X)
         S = safe_divide(R, Z)
-        C = self.gradprop(Z, self.X, S)
+        
+        # Manual gradient for addition: grad of (X1 + X2) w.r.t X1 is 1, w.r.t X2 is 1
+        C1 = S  # gradient is just 1, so grad * S = S
+        C2 = S
+        
+        a = X1 * C1
+        b = X2 * C2
+        
+        sum_dims = tuple(range(1, a.dim()))
+        a_sum = a.abs().sum(dim=sum_dims, keepdim=True)
+        b_sum = b.abs().sum(dim=sum_dims, keepdim=True)
+        R_sum = R.sum(dim=sum_dims, keepdim=True)
+        
+        a = a * safe_divide(a_sum / (a_sum + b_sum + 1e-12) * R_sum, a_sum)
+        b = b * safe_divide(b_sum / (a_sum + b_sum + 1e-12) * R_sum, b_sum)
+        
+        return [a, b]
 
-        a = self.X[0] * C[0]
-        b = self.X[1] * C[1]
-
-        a_sum = a.sum()
-        b_sum = b.sum()
-
-        a_fact = safe_divide(a_sum.abs(), a_sum.abs() + b_sum.abs()) * R.sum()
-        b_fact = safe_divide(b_sum.abs(), a_sum.abs() + b_sum.abs()) * R.sum()
-
-        a = a * safe_divide(a_fact, a.sum())
-        b = b * safe_divide(b_fact, b.sum())
-
-        outputs = [a, b]
-
-        return outputs
 
 class einsum(RelPropSimple):
     def __init__(self, equation):
