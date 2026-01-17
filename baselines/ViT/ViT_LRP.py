@@ -393,7 +393,6 @@ class VisionTransformer(nn.Module):
 
             rel_map = rel_map[:, 1:]
             rel_map = self.patch_embed.relprop(rel_map, **kwargs)
-            rel_map = rel_map.sum(dim=1)
 
             return rel_map
             
