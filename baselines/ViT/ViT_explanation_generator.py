@@ -97,7 +97,7 @@ class LRP:
         )
 
 
-class FulLRP:
+class RotChefer_nodiff:
     def __init__(
         self,
         model,
@@ -191,7 +191,7 @@ class FulLRP:
         return full_cam.detach()
 
 
-class FullGradLRP:
+class RotChefer:
     def __init__(
         self, model, n_samples=50, batch_size=16, angle_range: tuple = (-90.0, 90.0)
     ):
@@ -219,6 +219,10 @@ class FullGradLRP:
         is_ablation=False,
         start_layer=0,
     ):
+        if index is None:
+            output = self.model(input)
+            index = np.argmax(output.detach().cpu())
+
         angles = torch.linspace(
             self.start_angle,
             self.end_angle,
@@ -226,6 +230,7 @@ class FullGradLRP:
             device=input.device,
             dtype=torch.float32,
         )
+
         angles = torch.cat(
             [torch.zeros(1, device=input.device, dtype=torch.float32), angles]
         )

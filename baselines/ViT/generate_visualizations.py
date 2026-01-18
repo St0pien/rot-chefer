@@ -7,7 +7,7 @@ import argparse
 # Import saliency methods and models
 from misc_functions import *
 
-from ViT_explanation_generator import Baselines, LRP
+from ViT_explanation_generator import Baselines, LRP, RotChefer
 from ViT_new import vit_base_patch16_224
 from ViT_LRP import vit_base_patch16_224 as vit_LRP
 from ViT_orig_LRP import vit_base_patch16_224 as vit_orig_LRP
@@ -94,8 +94,11 @@ def compute_saliency_and_save(args):
 
             elif args.method == 'attn_gradcam':
                 Res = baselines.generate_cam_attn(data, index=index).reshape(data.shape[0], 1, 14, 14)
+            
+            elif args.method == 'rot_chefer':
+                Res = rot_lrp.generate_LRP(data, is_ablation=args.is_ablation)
 
-            if args.method != 'full_lrp' and args.method != 'input_grads':
+            if args.method != 'full_lrp' and args.method != 'input_grads' and args.method != 'rot_chefer':
                 Res = torch.nn.functional.interpolate(Res, scale_factor=16, mode='bilinear').cuda()
             Res = (Res - Res.min()) / (Res.max() - Res.min())
 
@@ -110,7 +113,7 @@ if __name__ == "__main__":
     parser.add_argument('--method', type=str,
                         default='grad_rollout',
                         choices=['rollout', 'lrp', 'transformer_attribution', 'full_lrp', 'lrp_last_layer',
-                                 'attn_last_layer', 'attn_gradcam'],
+                                 'attn_last_layer', 'attn_gradcam', 'rot_chefer'],
                         help='')
     parser.add_argument('--lmd', type=float,
                         default=10,
@@ -185,6 +188,7 @@ if __name__ == "__main__":
     model_LRP = vit_LRP(pretrained=True).cuda()
     model_LRP.eval()
     lrp = LRP(model_LRP)
+    rot_lrp = RotChefer(model_LRP, n_samples=64, batch_size=16)
 
     # orig LRP
     model_orig_LRP = vit_orig_LRP(pretrained=True).cuda()
@@ -197,7 +201,7 @@ if __name__ == "__main__":
         transforms.ToTensor(),
     ])
 
-    imagenet_ds = ImageNet(args.imagenet_validation_path, split='val', download=False, transform=transform)
+    imagenet_ds = ImageNet(args.imagenet_validation_path, split='val', transform=transform)
     sample_loader = torch.utils.data.DataLoader(
         imagenet_ds,
         batch_size=args.batch_size,
