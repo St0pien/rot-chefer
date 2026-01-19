@@ -276,8 +276,7 @@ class RotChefer:
             )[0]
 
             with torch.no_grad():
-                unrot_z = kornia.geometry.rotate(z, -b_angles)
-                pre_rot_cam = imgs * grad * unrot_z
+                pre_rot_cam = imgs.abs() * grad
 
                 full_cam += pre_rot_cam.sum(dim=(0,1)).unsqueeze(0).detach()
 

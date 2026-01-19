@@ -24,85 +24,154 @@ def normalize(tensor,
     return tensor
 
 
+def is_zero_attribution(arr, eps=1e-8):
+    return np.all(np.abs(arr) < eps)
+
+
 def compute_saliency_and_save(args):
-    first = True
-    with h5py.File(os.path.join(args.method_dir, 'results.hdf5'), 'a') as f:
-        data_cam = f.create_dataset('vis',
-                                    (1, 1, 224, 224),
-                                    maxshape=(None, 1, 224, 224),
-                                    dtype=np.float32,
-                                    compression="gzip")
-        data_image = f.create_dataset('image',
-                                      (1, 3, 224, 224),
-                                      maxshape=(None, 3, 224, 224),
-                                      dtype=np.float32,
-                                      compression="gzip")
-        data_target = f.create_dataset('target',
-                                       (1,),
-                                       maxshape=(None,),
-                                       dtype=np.int32,
-                                       compression="gzip")
-        for batch_idx, (data, target) in enumerate(tqdm(sample_loader)):
-            if first:
-                first = False
-                data_cam.resize(data_cam.shape[0] + data.shape[0] - 1, axis=0)
-                data_image.resize(data_image.shape[0] + data.shape[0] - 1, axis=0)
-                data_target.resize(data_target.shape[0] + data.shape[0] - 1, axis=0)
-            else:
-                data_cam.resize(data_cam.shape[0] + data.shape[0], axis=0)
-                data_image.resize(data_image.shape[0] + data.shape[0], axis=0)
-                data_target.resize(data_target.shape[0] + data.shape[0], axis=0)
+    results_path = os.path.join(args.method_dir, "results.hdf5")
 
-            # Add data
-            data_image[-data.shape[0]:] = data.data.cpu().numpy()
-            data_target[-data.shape[0]:] = target.data.cpu().numpy()
+    with h5py.File(results_path, "a") as f:
+        # --------------------------------------------------
+        # Create or load datasets
+        # --------------------------------------------------
+        if "vis" in f:
+            data_cam = f["vis"]
+            data_image = f["image"]
+            data_target = f["target"]
 
+            start_idx = data_cam.shape[0]
+            while start_idx > 0:
+                last_cam = data_cam[start_idx - 1]
+                if is_zero_attribution(last_cam):
+                    start_idx -= 1
+                else:
+                    break
+
+            # Shrink datasets if needed
+            if start_idx < data_cam.shape[0]:
+                data_cam.resize(start_idx, axis=0)
+                data_image.resize(start_idx, axis=0)
+                data_target.resize(start_idx, axis=0)
+        else:
+            data_cam = f.create_dataset(
+                "vis",
+                shape=(0, 1, 224, 224),
+                maxshape=(None, 1, 224, 224),
+                dtype=np.float32,
+                compression="gzip",
+            )
+            data_image = f.create_dataset(
+                "image",
+                shape=(0, 3, 224, 224),
+                maxshape=(None, 3, 224, 224),
+                dtype=np.float32,
+                compression="gzip",
+            )
+            data_target = f.create_dataset(
+                "target",
+                shape=(0,),
+                maxshape=(None,),
+                dtype=np.int32,
+                compression="gzip",
+            )
+            start_idx = 0
+
+        # --------------------------------------------------
+        # Iterate loader, skipping already-processed samples
+        # --------------------------------------------------
+        seen_samples = 0
+
+        for data, target in tqdm(sample_loader):
+            batch_size = data.shape[0]
+
+            # Skip batches that are already fully written
+            if seen_samples + batch_size <= start_idx:
+                seen_samples += batch_size
+                continue
+
+            # Handle partially-written batch
+            if seen_samples < start_idx:
+                offset = start_idx - seen_samples
+                data = data[offset:]
+                target = target[offset:]
+                batch_size = data.shape[0]
+
+            seen_samples += batch_size
+
+            # --------------------------------------------------
+            # Resize datasets
+            # --------------------------------------------------
+            new_size = data_cam.shape[0] + batch_size
+            data_cam.resize(new_size, axis=0)
+            data_image.resize(new_size, axis=0)
+            data_target.resize(new_size, axis=0)
+
+            # --------------------------------------------------
+            # Save image & target
+            # --------------------------------------------------
+            data_image[-batch_size:] = data.cpu().numpy()
+            data_target[-batch_size:] = target.cpu().numpy()
+
+            # --------------------------------------------------
+            # Compute saliency
+            # --------------------------------------------------
             target = target.to(device)
-
-            data = normalize(data)
-            data = data.to(device)
+            data = normalize(data).to(device)
             data.requires_grad_()
 
-            index = None
-            if args.vis_class == 'target':
-                index = target
+            index = target if args.vis_class == "target" else None
 
-            if args.method == 'rollout':
-                Res = baselines.generate_rollout(data, start_layer=1).reshape(data.shape[0], 1, 14, 14)
-                # Res = Res - Res.mean()
+            if args.method == "rollout":
+                Res = baselines.generate_rollout(data, start_layer=1).reshape(batch_size, 1, 14, 14)
 
-            elif args.method == 'lrp':
-                Res = lrp.generate_LRP(data, start_layer=1, index=index).reshape(data.shape[0], 1, 14, 14)
-                # Res = Res - Res.mean()
+            elif args.method == "lrp":
+                Res = lrp.generate_LRP(data, start_layer=1, index=index).reshape(batch_size, 1, 14, 14)
 
-            elif args.method == 'transformer_attribution':
-                Res = lrp.generate_LRP(data, start_layer=1, method="grad", index=index).reshape(data.shape[0], 1, 14, 14)
-                # Res = Res - Res.mean()
+            elif args.method == "transformer_attribution":
+                Res = lrp.generate_LRP(
+                    data, start_layer=1, method="grad", index=index
+                ).reshape(batch_size, 1, 14, 14)
 
-            elif args.method == 'full_lrp':
-                Res = orig_lrp.generate_LRP(data, method="full", index=index).reshape(data.shape[0], 1, 224, 224)
-                # Res = Res - Res.mean()
+            elif args.method == "full_lrp":
+                Res = orig_lrp.generate_LRP(
+                    data, method="full", index=index
+                ).reshape(batch_size, 1, 224, 224)
 
-            elif args.method == 'lrp_last_layer':
-                Res = orig_lrp.generate_LRP(data, method="last_layer", is_ablation=args.is_ablation, index=index) \
-                    .reshape(data.shape[0], 1, 14, 14)
-                # Res = Res - Res.mean()
+            elif args.method == "lrp_last_layer":
+                Res = orig_lrp.generate_LRP(
+                    data,
+                    method="last_layer",
+                    is_ablation=args.is_ablation,
+                    index=index,
+                ).reshape(batch_size, 1, 14, 14)
 
-            elif args.method == 'attn_last_layer':
-                Res = lrp.generate_LRP(data, method="last_layer_attn", is_ablation=args.is_ablation) \
-                    .reshape(data.shape[0], 1, 14, 14)
+            elif args.method == "attn_last_layer":
+                Res = lrp.generate_LRP(
+                    data,
+                    method="last_layer_attn",
+                    is_ablation=args.is_ablation,
+                ).reshape(batch_size, 1, 14, 14)
 
-            elif args.method == 'attn_gradcam':
-                Res = baselines.generate_cam_attn(data, index=index).reshape(data.shape[0], 1, 14, 14)
-            
-            elif args.method == 'rot_chefer':
+            elif args.method == "attn_gradcam":
+                Res = baselines.generate_cam_attn(
+                    data, index=index
+                ).reshape(batch_size, 1, 14, 14)
+
+            elif args.method == "rot_chefer":
                 Res = rot_lrp.generate_LRP(data, is_ablation=args.is_ablation)
 
-            if args.method != 'full_lrp' and args.method != 'input_grads' and args.method != 'rot_chefer':
-                Res = torch.nn.functional.interpolate(Res, scale_factor=16, mode='bilinear').cuda()
-            Res = (Res - Res.min()) / (Res.max() - Res.min())
+            # --------------------------------------------------
+            # Post-processing
+            # --------------------------------------------------
+            if args.method not in {"full_lrp", "input_grads", "rot_chefer"}:
+                Res = torch.nn.functional.interpolate(
+                    Res, scale_factor=16, mode="bilinear"
+                ).cuda()
 
-            data_cam[-data.shape[0]:] = Res.data.cpu().numpy()
+            Res = (Res - Res.min()) / (Res.max() - Res.min() + 1e-8)
+
+            data_cam[-batch_size:] = Res.detach().cpu().numpy()
 
 
 if __name__ == "__main__":
