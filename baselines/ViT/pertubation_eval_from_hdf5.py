@@ -45,8 +45,6 @@ def eval(args):
     perturb_index = 0
 
     for batch_idx, (data, vis, target) in enumerate(tqdm(sample_loader)):
-        if batch_idx > 10:
-            break
         # Update the number of samples
         num_samples += len(data)
 
