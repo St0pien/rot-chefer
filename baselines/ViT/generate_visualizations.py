@@ -14,7 +14,6 @@ from ViT_orig_LRP import vit_base_patch16_224 as vit_orig_LRP
 
 from torchvision.datasets import ImageNet
 
-
 def normalize(tensor,
               mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]):
     dtype = tensor.dtype
@@ -172,6 +171,7 @@ def compute_saliency_and_save(args):
             Res = (Res - Res.min()) / (Res.max() - Res.min() + 1e-8)
 
             data_cam[-batch_size:] = Res.detach().cpu().numpy()
+            f.flush()
 
 
 if __name__ == "__main__":

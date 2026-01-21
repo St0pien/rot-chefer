@@ -153,7 +153,7 @@ if __name__ == "__main__":
                         default='grad_rollout',
                         choices=['rollout', 'lrp', 'transformer_attribution', 'full_lrp', 'v_gradcam', 'lrp_last_layer',
                                  'lrp_second_layer', 'gradcam',
-                                 'attn_last_layer', 'attn_gradcam', 'input_grads'],
+                                 'attn_last_layer', 'attn_gradcam', 'input_grads', 'rot_chefer'],
                         help='')
     parser.add_argument('--vis-class', type=str,
                         default='top',
