@@ -7,7 +7,7 @@ import argparse
 # Import saliency methods and models
 from misc_functions import *
 
-from ViT_explanation_generator import Baselines, LRP, RotChefer
+from ViT_explanation_generator import Baselines, LRP, RotChefer, RotCheferV2
 from ViT_new import vit_base_patch16_224
 from ViT_LRP import vit_base_patch16_224 as vit_LRP
 from ViT_orig_LRP import vit_base_patch16_224 as vit_orig_LRP
@@ -159,11 +159,13 @@ def compute_saliency_and_save(args):
 
             elif args.method == "rot_chefer":
                 Res = rot_lrp.generate_LRP(data, is_ablation=args.is_ablation)
+            elif args.method == "rot_chefer_v2":
+                Res = rot_lrp_v2.generate_LRP(data, is_ablation=args.is_ablation)
 
             # --------------------------------------------------
             # Post-processing
             # --------------------------------------------------
-            if args.method not in {"full_lrp", "input_grads", "rot_chefer"}:
+            if args.method not in {"full_lrp", "input_grads", "rot_chefer", "rot_chefer_v2"}:
                 Res = torch.nn.functional.interpolate(
                     Res, scale_factor=16, mode="bilinear"
                 ).cuda()
@@ -182,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument('--method', type=str,
                         default='grad_rollout',
                         choices=['rollout', 'lrp', 'transformer_attribution', 'full_lrp', 'lrp_last_layer',
-                                 'attn_last_layer', 'attn_gradcam', 'rot_chefer'],
+                                 'attn_last_layer', 'attn_gradcam', 'rot_chefer', 'rot_chefer_v2'],
                         help='')
     parser.add_argument('--lmd', type=float,
                         default=10,
@@ -258,6 +260,7 @@ if __name__ == "__main__":
     model_LRP.eval()
     lrp = LRP(model_LRP)
     rot_lrp = RotChefer(model_LRP, n_samples=64, batch_size=16)
+    rot_lrp_v2 = RotCheferV2(model_LRP, n_samples=64, batch_size=16)
 
     # orig LRP
     model_orig_LRP = vit_orig_LRP(pretrained=True).cuda()

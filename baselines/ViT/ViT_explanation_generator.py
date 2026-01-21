@@ -97,7 +97,7 @@ class LRP:
         )
 
 
-class RotChefer_nodiff:
+class RotCheferV2:
     def __init__(
         self,
         model,
