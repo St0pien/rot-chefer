@@ -141,8 +141,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', type=int,
                         default=16,
                         help='')
-    parser.add_argument('--neg', type=bool,
-                        default=True,
+    parser.add_argument('--neg', action="store_true",
                         help='')
     parser.add_argument('--value', action='store_true',
                         default=False,
